@@ -1,4 +1,7 @@
-from har2case import utils
+from swagger2case import utils
+import re
+from loguru import logger
+import sys
 
 class SwaggerParser(object):
 
@@ -21,10 +24,11 @@ class SwaggerParser(object):
 
 
 
+    def get_swagger_all_info(self):
+        return load_swagger_api(self.swagger_file_path)
 
 
-
-    def _make_apis(self):
+    def _gen_apis(self):
         """ make api list.
             api list are parsed from swagger paths dict.
 
@@ -37,10 +41,10 @@ class SwaggerParser(object):
 
             return False
 
-        api_list = []
+        api_all_list = []
         swagger_all_info = load_swagger_api(self.swagger_file_path)
-        host = swagger_all_info['host']
-        basepath = swagger_all_info['basePath']
+        # host = swagger_all_info['host']
+        # basepath = swagger_all_info['basePath']
         paths_dict = swagger_all_info['paths']
         for key, value in paths_dict:
 
@@ -51,15 +55,24 @@ class SwaggerParser(object):
                 continue
 
             else:
-                api_dict = _make_api(key, value, host, basepath)
-                api_list.append(api_dict)
+                api_list = self._make_apis_for_urlpath(key, value)
+                api_all_list.append(api_list)
+        return api_all_list
+
+    def _make_apis_for_urlpath(self, urlpath, urlpath_value):
+        """ extract info from urlpath dict and make apis
+        """
+        api_list = [()]
+        for method , method_value in urlpath_value:
+            (tag_name, api_dict) = self._make_api(urlpath, method, method_value)
+            api_list.append((tag_name, api_dict))
         return api_list
 
-    def _make_api(self, url_path, value, host, basepath):
+    def _make_api(self, urlpath, method, method_value):
         """ extract info from path dict and make api
 
                 Args:
-                    "/pet": {
+                    {
                         "post": {
                         "tags": [
                             "pet"
@@ -94,9 +107,7 @@ class SwaggerParser(object):
                            ]
                        }]
                     },
-
         """
-
 
         api_dict = {
             "name": "",
@@ -105,25 +116,26 @@ class SwaggerParser(object):
             "base_url": "",
             "validate": []
         }
-        self._prepare_name(api_dict, value)
-        self._prepare_variables(api_dict, value, basepath, host)
-        self._prepare_request(api_dict, url_path, value)
-        self._prepare_validate(api_dict, value)
-        return api_dict
+        tag_name = method_value['tags'][0]
+        self._prepare_name(api_dict, method_value)
+        self._prepare_baseurl(api_dict)
+        self._prepare_variables(api_dict, method_value)
+        self._prepare_request(api_dict, method, method_value, urlpath)
+        self._prepare_validate(api_dict, method_value)
+        return (tag_name, api_dict)
 
-    def _prepare_name(self, api_dict, value):
-        '''
-        parser operationId info from path dict and make name of api
-        '''
-        api_dict['name'] = value['operationId']
+    def _prepare_name(self, api_dict, method_value):
+        """ parser operationId info from path dict and make name of api
+        """
+        api_dict['name'] = method_value['operationId']
 
-    def _prepare_variables(self, api_dict, value):
+    def _prepare_variables(self, api_dict, method_value):
         pass
 
-    def _prepare_validate(self, api_dict, value):
+    def _prepare_validate(self, api_dict, method_value):
         pass
 
-    def _prepare_request(self,api_dict, url_path, value):
+    def _prepare_request(self,api_dict, method, method_value, urlpath):
         """ extract info from path dict and make request.
 
             Args:
@@ -147,12 +159,12 @@ class SwaggerParser(object):
                 },
         """
 
-        _make_request_url(api_dict, url_path, value)
-        _make_request_method(api_dict, value)
-        _make_request_headers(api_dict, value)
-        _make_request_data(api_dict, value)
+        self._make_request_url(api_dict, method, method_value, urlpath)
+        self._make_request_method(api_dict, method)
+        self._make_request_headers(api_dict, method_value)
+        self._make_request_data(api_dict, method_value)
 
-    def __make_request_url(self, api_dict, url_path, value):
+    def _make_request_url(self, api_dict, method, method_value, urlpath):
         """ parse url and parameters, and make url and params of api request
 
                 Args:
@@ -176,15 +188,73 @@ class SwaggerParser(object):
                               "collectionFormat": "multi"
                             }
                           ],
+                        }
                 Returns:
                     {
                         "request": {
                             url: "/pet/findByStatus",
-                            params: {"name": "sold"}
+                            params: {"status": "sold"}
+                        }
+                    }
+
+                    {
+                        "request": {
+                            url: "/pet/$petid",
                         }
                     }
 
         """
+        if re.search(r'\{.*\}', urlpath):
+            urlpath = re.sub(r'\{.*\}', '\$.*', urlpath)
+        else:
+            for key, value in method_value:
+                if method != 'get':
+                    break
+                else:
+                    if 'parameters' in method_value:
+                        params = {}
+                        for parameter in value['parameters']:
+                            parameter_key = parameter['name']
+                            parameter_value = ""
+                            params.update({parameter_key, parameter_value})
+                        api_dict['request']['url'] = urlpath
+                        api_dict['request']['params'] = params
+                    else:
+                        logger.error("url missed paramters in request.")
+        api_dict['request']['url'] = urlpath
+
+    def _make_request_method(self, api_dict, method):
+        """ parse method and make method of api request
+        """
+        if not method or method not in [
+            "GET", "POST", "OPTIONS", "HEAD", "PUT", "PATCH", "DELETE", "CONNECT", "TRACE"]:
+            logger.exception("method missed in request.")
+            sys.exit(1)
+        api_dict['request']['method'] = method
+
+    def _make_request_headers(self, api_dict, method_value):
+        """ parser consumes and make headers of api request
+            Args:
+                {
+                    "post": {
+                    "consumes": [
+                        "application/json",
+                    ],
+
+            Return:
+                {
+                    "request":{
+                        "headers":{
+                            "Content-Type": "application/json"
+                        }
+                    }
+                }
+        """
+        
+
+
+
+
 
 
 
