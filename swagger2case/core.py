@@ -2,6 +2,7 @@ from swagger2case import utils
 import re
 from loguru import logger
 import sys
+import json
 
 class SwaggerParser(object):
 
@@ -9,24 +10,7 @@ class SwaggerParser(object):
         self.swagger_file_path = swagger_file_path
         self.filter_str = filter_str
         self.exclude_str = exclude_str or ""
-
-
-    # def gen_api(self, filt_type=json):
-    #     #create
-    #     _make_dirctionar_for_tags(tags_list)
-    #     apis_list = _make_apis(paths_dict)  #api have exists correct dir
-    #     for api in apis_list:
-    #         #api = {'tag_name', 'api_dict'}
-    #         if file_type = json:
-    #             utils.dump_json(api.api_dict, "api/pet/xxx.json")
-    #         else
-    #             utils.dump_yaml(api.api_dict, new_file_path)
-
-
-
-    def get_swagger_all_info(self):
-        return load_swagger_api(self.swagger_file_path)
-
+        self.swagger_all_info = utils.load_swagger_api(swagger_file_path)
 
     def _gen_apis(self):
         """ make api list.
@@ -42,10 +26,7 @@ class SwaggerParser(object):
             return False
 
         api_all_list = []
-        swagger_all_info = load_swagger_api(self.swagger_file_path)
-        # host = swagger_all_info['host']
-        # basepath = swagger_all_info['basePath']
-        paths_dict = swagger_all_info['paths']
+        paths_dict = self.swagger_all_info['paths']
         for key, value in paths_dict:
 
             if self.filter_str and self.filter_str not in key:
@@ -127,7 +108,23 @@ class SwaggerParser(object):
     def _prepare_name(self, api_dict, method_value):
         """ parser operationId info from path dict and make name of api
         """
-        api_dict['name'] = method_value['operationId']
+        if method_value['operationId']:
+            api_dict['name'] = method_value['operationId']
+        else:
+            logger.exception("operationId missed in swagger api file")
+
+    def _prepare_baseurl(self, api_dict):
+        """
+        parser host/basePath/schemes info and make base_url of api
+        """
+        host = self.swagger_all_info['host']
+        basepath = self.swagger_all_info['basePath']
+        schemes = self.swagger_all_info['schemes'][0]
+        if host and basepath and schemes:
+            api_dict['base_url'] = f"{schemes}:{host}{basepath}"
+        else:
+            logger.exception("host or basePath or schemes miss in swagger api file")
+
 
     def _prepare_variables(self, api_dict, method_value):
         pass
@@ -156,13 +153,14 @@ class SwaggerParser(object):
                             "$ref": "#/definitions/Pet"
                         }
                     }],
+                    }
                 },
         """
 
         self._make_request_url(api_dict, method, method_value, urlpath)
         self._make_request_method(api_dict, method)
         self._make_request_headers(api_dict, method_value)
-        self._make_request_data(api_dict, method_value)
+        self._make_request_data(api_dict, method, method_value)
 
     def _make_request_url(self, api_dict, method, method_value, urlpath):
         """ parse url and parameters, and make url and params of api request
@@ -205,7 +203,7 @@ class SwaggerParser(object):
 
         """
         if re.search(r'\{.*\}', urlpath):
-            urlpath = re.sub(r'\{.*\}', '\$.*', urlpath)
+            urlpath = re.sub(r'\{.*\}', '\\$.*', urlpath)
         else:
             for key, value in method_value:
                 if method != 'get':
@@ -217,7 +215,6 @@ class SwaggerParser(object):
                             parameter_key = parameter['name']
                             parameter_value = ""
                             params.update({parameter_key, parameter_value})
-                        api_dict['request']['url'] = urlpath
                         api_dict['request']['params'] = params
                     else:
                         logger.error("url missed paramters in request.")
@@ -250,7 +247,129 @@ class SwaggerParser(object):
                     }
                 }
         """
-        
+        api_dict['request']['headers']['Content-Type'] = method_value['consumes']
+
+    def _make_request_data(self, api_dict, method, method_value):
+        """ extract info from method value dict and make data of request.
+
+                Args:
+                    "/pet": {
+                        "post": {
+                        "summary": "Add a new pet to the store",
+                        "consumes": [
+                            "application/json"],
+                        "produces": [
+                            "application/json" ],
+                        "parameters": [
+                        {
+                            "in": "body",
+                            "name": "body",
+                            "description": "Pet object that needs to be added to the store",
+                            "required": true,
+                            "schema": {
+                                "$ref": "#/definitions/Pet"
+                            }
+                        }],
+                        }
+                    },
+                    "definitions": {
+                        "Pet": {
+                            "type": "object",
+                            "required": [
+                                "name",
+                                "photoUrls"
+                            ],
+                            "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "format": "int64"
+                                },
+                                "category": {
+                                  "$ref": "#/definitions/Category"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "example": "doggie"
+                                },
+                                "photoUrls": {
+                                  "type": "array",
+                                  "xml": {
+                                    "name": "photoUrl",
+                                    "wrapped": true
+                                  },
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "xml": {
+                                    "name": "tag",
+                                    "wrapped": true
+                                  },
+                                  "items": {
+                                    "$ref": "#/definitions/Tag"
+                                  }
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "description": "pet status in the store",
+                                  "enum": [
+                                    "available",
+                                    "pending",
+                                    "sold"
+                                  ]
+                                }
+                            },
+                              "xml": {
+                                "name": "Pet"
+                              }
+                        },
+                Return:
+                    {
+                        "request": {
+                            "method": "POST",
+                            "data": {"id": "", "name": ""}
+                        }
+                    }
+        """
+        if method in ["POST", "PUT", "PATCH"]:
+            mimeType = method_value['consumes']
+
+            postdata = {}
+            for parameter in method_value['parameters']:
+
+                if "body" in parameter['in'] and "schema" in parameter:
+                    ref_path = parameter['schema']['$ref'].split('/')
+                    definitions = ref_path[1]
+                    tag_name = ref_path[2]
+                    tag_name_value = self.swagger_all_info.get(definitions).get(tag_name)
+                    properties_value = tag_name_value['properties']
+                    for key in properties_value:
+                        postdata.update({key, ""})
+
+                if "formData" in parameter['in']:
+                    postdata.update({parameter['name'], ""})
+
+            request_data_key = "data"
+            if not mimeType:
+                pass
+            elif mimeType.startswith("application/json"):
+                try:
+                    post_data = json.loads(postdata)
+                    request_data_key = "json"
+                except JSONDecodeError:
+                    pass
+            elif mimeType.startswith("application/x-www-form-urlencoded"):
+                post_data = utils.convert_x_www_form_urlencoded_to_dict(postdata)
+            else:
+                # TODO: make compatible with more mimeType
+                pass
+            teststep_dict["request"][request_data_key] = post_data
+
+
+
+
 
 
 
