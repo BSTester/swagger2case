@@ -6,7 +6,6 @@ Usage:
     >>> hswagger2case demo.json -2y
 """
 import argparse
-import logging
 import sys
 from swagger2case.__about__ import __version__
 from loguru import logger
