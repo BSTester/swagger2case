@@ -130,7 +130,32 @@ class SwaggerParser(object):
         pass
 
     def _prepare_validate(self, api_dict, method_value):
-        pass
+        """ extract info from responses and make validate
+
+            Arg:
+                "responses": {
+                    "200": {
+                      "description": "successful operation",
+                      "schema": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/definitions/Pet"
+                        }
+                      }
+                    },
+                    "400": {
+                      "description": "Invalid tag value"
+                    }
+                },
+
+            Return:
+
+                "validate": [
+                    {"eq": ["status_code", 200]},
+                    {"eq": ["content.token", 16]}
+                ]
+
+        """
 
     def _prepare_request(self,api_dict, method, method_value, urlpath):
         """ extract info from path dict and make request.
@@ -205,10 +230,9 @@ class SwaggerParser(object):
         if re.search(r'\{.*\}', urlpath):
             urlpath = re.sub(r'\{.*\}', '\\$.*', urlpath)
         else:
-            for key, value in method_value:
-                if method != 'get':
-                    break
-                else:
+            if method == 'get':
+                for key, value in method_value:
+
                     if 'parameters' in method_value:
                         params = {}
                         for parameter in value['parameters']:
@@ -223,6 +247,7 @@ class SwaggerParser(object):
     def _make_request_method(self, api_dict, method):
         """ parse method and make method of api request
         """
+        method = method.upper()
         if not method or method not in [
             "GET", "POST", "OPTIONS", "HEAD", "PUT", "PATCH", "DELETE", "CONNECT", "TRACE"]:
             logger.exception("method missed in request.")
@@ -247,7 +272,7 @@ class SwaggerParser(object):
                     }
                 }
         """
-        api_dict['request']['headers']['Content-Type'] = method_value['consumes']
+        api_dict['request']['headers'] = {"Content-Type", method_value['consumes'][0]}
 
     def _make_request_data(self, api_dict, method, method_value):
         """ extract info from method value dict and make data of request.
