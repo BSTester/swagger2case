@@ -156,8 +156,49 @@ class SwaggerParser(object):
                 ]
 
         """
+        for status_code, value in method_value['responses']:
+            api_dict['validate'].append(
+                {"eq": ["status_code", status_code]})
 
-    def _prepare_request(self,api_dict, method, method_value, urlpath):
+            self._make_response_headers(api_dict, method_value)
+
+            if "schema" in value and "$ref" in value["schema"]["items"]:
+                definitions_dict = self._get_definitions_ref_value(value["schema"]["items"]["$ref"])
+
+                if "application/json" in method_value['produces']:
+                    try:
+                        definitions_dict_json = json.loads(definitions_dict)
+                    except JSONDecodeError:
+                        logger.warning(
+                            "response definitions_dict can not be loaded as json: {}".format(definitions_dict)
+                        )
+                        return
+                    if not isinstance(definitions_dict_json, dict):
+                        return
+                    logger.info(f"definitions_dict_json::{definitions_dict_json}")
+                    for key, definitions_value in definitions_dict_json.items():
+                        if isinstance(definitions_value, (dict, list)):
+                            continue
+                        api_dict['validate'].append(
+                            {"eq": [f"content.{key}", definitions_value]})
+
+
+    def _make_response_headers(self, api_dict, method_value):
+        if "produces" in method_value:
+
+            if "application/json" in method_value['produces']:
+                api_dict['validate'].append(
+                    {"eq": ["headers.Content-Type", "application/json"]}
+                )
+            elif "application/xml" in method_value['produces']:
+                api_dict['validate'].append(
+                    {"eq": ["headers.Content-Type", "application/xml"]}
+                )
+        else:
+            logger.exception("produces miss in swagger api file")
+
+
+    def _prepare_request(self, api_dict, method, method_value, urlpath):
         """ extract info from path dict and make request.
 
             Args:
