@@ -4,6 +4,11 @@ from loguru import logger
 import sys
 import json
 
+try:
+    from json.decoder import JSONDecodeError
+except ImportError:
+    JSONDecodeError = ValueError
+
 class SwaggerParser(object):
 
     def __init__(self, swagger_file_path, filter_str=None, exclude_str=None):
@@ -156,7 +161,7 @@ class SwaggerParser(object):
                 ]
 
         """
-        for status_code, value in method_value['responses']:
+        for status_code, value in method_value['responses'].items():
             api_dict['validate'].append(
                 {"eq": ["status_code", status_code]})
 
@@ -268,22 +273,26 @@ class SwaggerParser(object):
                     }
 
         """
-        if re.search(r'\{.*\}', urlpath):
-            urlpath = re.sub(r'\{.*\}', '\\$.*', urlpath)
-        else:
-            if method == 'get':
-                for key, value in method_value:
 
-                    if 'parameters' in method_value:
-                        params = {}
-                        for parameter in value['parameters']:
-                            parameter_key = parameter['name']
-                            parameter_value = ""
-                            params.update({parameter_key, parameter_value})
-                        api_dict['request']['params'] = params
-                    else:
-                        logger.error("url missed paramters in request.")
-        api_dict['request']['url'] = urlpath
+
+        if urlpath:
+            result = re.search(r'\{(.*)\}', urlpath)
+            if result:
+                new_nurlpath = re.sub(r'\{(.*)\}', "$\\1", urlpath)
+
+                api_dict['variables'] = {result.group(1): ""}
+                api_dict['request']['url'] = new_nurlpath
+
+            else:
+                if method == 'get' and 'parameters' in method_value:
+                    params = {}
+                    for paramter in method_value['parameters']:
+                        paramter_key = paramter['name']
+                        params.update({paramter_key: ""})
+                    api_dict['request']['params'] = params
+                api_dict['request']['url'] = urlpath
+        else:
+            logger.error("urlpath missed in request.")
 
     def _make_request_method(self, api_dict, method):
         """ parse method and make method of api request
@@ -399,8 +408,8 @@ class SwaggerParser(object):
                         }
                     }
         """
-        if method in ["POST", "PUT", "PATCH"]:
-            mimeType = method_value['consumes']
+        if method in ["post", "put", "patch"]:
+            mimeType = method_value['consumes'][0]
 
             postdata = {}
             for parameter in method_value['parameters']:
@@ -412,10 +421,10 @@ class SwaggerParser(object):
                     tag_name_value = self.swagger_all_info.get(definitions).get(tag_name)
                     properties_value = tag_name_value['properties']
                     for key in properties_value:
-                        postdata.update({key, ""})
+                        postdata.update({key: ""})
 
                 if "formData" in parameter['in']:
-                    postdata.update({parameter['name'], ""})
+                    postdata.update({parameter['name']: ""})
 
             request_data_key = "data"
             if not mimeType:
