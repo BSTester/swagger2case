@@ -64,7 +64,8 @@ class TestSwagger(object):
         api_dict = {
             "request": {
                 "url": ''
-            }
+            },
+            "variables": {}
         }
         self.swagger_parser._make_request_url(
             api_dict,
@@ -79,7 +80,8 @@ class TestSwagger(object):
         api_dict = {
             "request": {
                 "url": ''
-            }
+            },
+            "variables": {}
         }
         self.swagger_parser._make_request_url(
             api_dict,
@@ -93,7 +95,8 @@ class TestSwagger(object):
     def test_make_request_url_get_store_inventory_parameters_is_empty(self):
         api_dict = {
             "request": {
-                "url": ''
+                "url": "",
+                "params": {}
             }
         }
         self.swagger_parser._make_request_url(
@@ -109,7 +112,8 @@ class TestSwagger(object):
         api_dict = {
             "request": {
                 "url": ''
-            }
+            },
+            "variables": {}
         }
         self.swagger_parser._make_request_url(
             api_dict,
@@ -123,8 +127,10 @@ class TestSwagger(object):
     def test_make_request_data_post_pet_body(self):
         api_dict = {
             "request": {
-                "data": {}
-            }
+                "json": {},
+                "headers": {}
+            },
+            "variables": {}
         }
         self.swagger_parser._make_request_data(
             api_dict,
@@ -132,15 +138,161 @@ class TestSwagger(object):
             self.get_method_value("/pet", "post")
         )
 
-        assert api_dict['request']['data'] == {
-            "id": "",
+        assert api_dict['request']['json'] == {
+            "id": 0,
             "category": {
-                "id": "",
+                "id": 0,
                 "name": ""
             },
             "name": "",
             "photoUrls": [],
             "tags": [],
             "status": ""}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_put_pet_body(self):
+        api_dict = {
+            "request": {
+                "json": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'put',
+            self.get_method_value("/pet", "put")
+        )
+
+        assert api_dict['request']['json'] == {
+            "id": 0,
+            "category": {
+                "id": 0,
+                "name": ""
+            },
+            "name": "",
+            "photoUrls": [],
+            "tags": [],
+            "status": ""}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_get_pet_findByStatus_query(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'get',
+            self.get_method_value("/pet/findByStatus", "get")
+        )
+
+        assert api_dict['request']['data'] == {}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_post_pet_petId_uploadImage_formdata(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'post',
+            self.get_method_value("/pet/{petId}/uploadImage", "post")
+        )
+
+        assert api_dict['request']['data'] == {
+            'additionalMetadata': '',
+            'file': ''
+            }
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_get_store_inventory_parameters_is_empty(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'get',
+            self.get_method_value("/store/inventory", "get")
+        )
+
+        assert api_dict['request']['data'] == {}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_post_store_order_body(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'post',
+            self.get_method_value("/store/order", "post")
+        )
+
+        assert api_dict['request']['data'] == {
+            'id': 0,
+            'petId': 0,
+            'quantity': 0,
+            'shipDate': '',
+            'status': '',
+            'complete': False}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
+
+    def test_make_request_data_delete_pet_petId_header(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'delete',
+            self.get_method_value("/pet/{petId}", "delete")
+        )
+
+        assert api_dict['request']['data'] == {}
+        assert api_dict['request']['headers'] == {"api_key": "$api_key"}
+        assert api_dict['variables'] == {"api_key": ""}
+
+    def test_make_request_data_post_pet_petId_formdata(self):
+        api_dict = {
+            "request": {
+                "data": {},
+                "headers": {}
+            },
+            "variables": {}
+        }
+        self.swagger_parser._make_request_data(
+            api_dict,
+            'post',
+            self.get_method_value("/pet/{petId}", "post")
+        )
+
+        assert api_dict['request']['data'] == {"name": "", "status": ""}
+        assert api_dict['request']['headers'] == {}
+        assert api_dict['variables'] == {}
 
 
