@@ -4,11 +4,6 @@ from loguru import logger
 import sys
 import json
 
-try:
-    from json.decoder import JSONDecodeError
-except ImportError:
-    JSONDecodeError = ValueError
-
 class SwaggerParser(object):
 
     def __init__(self, swagger_file_path, filter_str=None, exclude_str=None):
@@ -98,10 +93,18 @@ class SwaggerParser(object):
         api_dict = {
             "name": "",
             "variables": {},
-            "request": {},
+            "request": {
+                'url': '',
+                'method': '',
+                'headers': {},
+                'data': {},
+                'json': {},
+                'params': {}
+            },
             "base_url": "",
             "validate": []
         }
+
         tag_name = method_value['tags'][0]
         self._prepare_name(api_dict, method_value)
         self._prepare_baseurl(api_dict)
@@ -129,7 +132,6 @@ class SwaggerParser(object):
             api_dict['base_url'] = f"{schemes}:{host}{basepath}"
         else:
             logger.exception("host or basePath or schemes miss in swagger api file")
-
 
     def _prepare_variables(self, api_dict, method_value):
         pass
@@ -227,7 +229,7 @@ class SwaggerParser(object):
                     }
                 },
         """
-
+        #logger.error(api_dict)
         self._make_request_url(api_dict, method, method_value, urlpath)
         self._make_request_method(api_dict, method)
         self._make_request_headers(api_dict, method_value)
@@ -274,22 +276,23 @@ class SwaggerParser(object):
 
         """
 
-
+        #logger.error(api_dict)
         if urlpath:
             result = re.search(r'\{(.*)\}', urlpath)
             if result:
                 new_nurlpath = re.sub(r'\{(.*)\}', "$\\1", urlpath)
 
-                api_dict['variables'] = {result.group(1): ""}
+                api_dict['variables'].update({result.group(1): ""})
                 api_dict['request']['url'] = new_nurlpath
 
+            elif method == 'get' and 'parameters' in method_value:
+                params = {}
+                for paramter in method_value['parameters']:
+                    paramter_key = paramter['name']
+                    params.update({paramter_key: ""})
+                api_dict['request']['params'] = params
+                api_dict['request']['url'] = urlpath
             else:
-                if method == 'get' and 'parameters' in method_value:
-                    params = {}
-                    for paramter in method_value['parameters']:
-                        paramter_key = paramter['name']
-                        params.update({paramter_key: ""})
-                    api_dict['request']['params'] = params
                 api_dict['request']['url'] = urlpath
         else:
             logger.error("urlpath missed in request.")
@@ -322,7 +325,8 @@ class SwaggerParser(object):
                     }
                 }
         """
-        api_dict['request']['headers'] = {"Content-Type", method_value['consumes'][0]}
+        if "consumes" in method_value:
+            api_dict['request']['headers'].update({"Content-Type": method_value['consumes'][0]})
 
     def _make_request_data(self, api_dict, method, method_value):
         """ extract info from method value dict and make data of request.
@@ -408,39 +412,33 @@ class SwaggerParser(object):
                         }
                     }
         """
-        if method in ["post", "put", "patch"]:
-            mimeType = method_value['consumes'][0]
-
+        if method in ["post", "put", "patch", "delete"]:
+            mimeType = method_value.get('consumes', [''])[0]
             postdata = {}
+
             for parameter in method_value['parameters']:
+                if "body" == parameter['in'] and "schema" in parameter:
+                    postdata.update(utils.get_related_tag_definitions_content(
+                        self.swagger_all_info,
+                        parameter['schema']['$ref'].split('/')[2])
+                    )
 
-                if "body" in parameter['in'] and "schema" in parameter:
-                    ref_path = parameter['schema']['$ref'].split('/')
-                    definitions = ref_path[1]
-                    tag_name = ref_path[2]
-                    tag_name_value = self.swagger_all_info.get(definitions).get(tag_name)
-                    properties_value = tag_name_value['properties']
-                    for key in properties_value:
-                        postdata.update({key: ""})
-
-                if "formData" in parameter['in']:
+                if "formData" == parameter['in']:
                     postdata.update({parameter['name']: ""})
+                if "header" == parameter['in']:
+                    api_dict['variables'].update({parameter['name']: ""})
+                    api_dict['request']['headers'].update({parameter['name']: f"${parameter['name']}"})
 
             request_data_key = "data"
             if not mimeType:
                 pass
             elif mimeType.startswith("application/json"):
-                try:
-                    post_data = json.loads(postdata)
-                    request_data_key = "json"
-                except JSONDecodeError:
-                    pass
-            elif mimeType.startswith("application/x-www-form-urlencoded"):
-                post_data = utils.convert_x_www_form_urlencoded_to_dict(postdata)
+                request_data_key = "json"
             else:
                 # TODO: make compatible with more mimeType
                 pass
-            teststep_dict["request"][request_data_key] = post_data
+            api_dict["request"][request_data_key] = postdata
+
 
 
 
