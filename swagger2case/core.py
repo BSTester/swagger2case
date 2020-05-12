@@ -275,27 +275,22 @@ class SwaggerParser(object):
                     }
 
         """
-
-        #logger.error(api_dict)
-        if urlpath:
-            result = re.search(r'\{(.*)\}', urlpath)
-            if result:
-                new_nurlpath = re.sub(r'\{(.*)\}', "$\\1", urlpath)
-
-                api_dict['variables'].update({result.group(1): ""})
-                api_dict['request']['url'] = new_nurlpath
-
-            elif method == 'get' and 'parameters' in method_value:
-                params = {}
-                for paramter in method_value['parameters']:
-                    paramter_key = paramter['name']
-                    params.update({paramter_key: ""})
-                api_dict['request']['params'] = params
-                api_dict['request']['url'] = urlpath
-            else:
-                api_dict['request']['url'] = urlpath
-        else:
+        if not urlpath:
             logger.error("urlpath missed in request.")
+        elif re.search(r'\{(.*)\}', urlpath):
+            new_nurlpath = re.sub(r'\{(.*)\}', "$\\1", urlpath)
+
+            api_dict['variables'].update({re.search(r'\{(.*)\}', urlpath).group(1): ""})
+            api_dict['request']['url'] = new_nurlpath
+        elif method == 'get' and 'parameters' in method_value:
+            params = {}
+            for paramter in method_value['parameters']:
+                paramter_key = paramter['name']
+                params.update({paramter_key: ""})
+            api_dict['request']['params'] = params
+            api_dict['request']['url'] = urlpath
+        else:
+            api_dict['request']['url'] = urlpath
 
     def _make_request_method(self, api_dict, method):
         """ parse method and make method of api request
@@ -412,32 +407,38 @@ class SwaggerParser(object):
                         }
                     }
         """
-        if method in ["post", "put", "patch", "delete"]:
-            mimeType = method_value.get('consumes', [''])[0]
-            postdata = {}
+        if method not in ["post", "put", "patch", "delete"]:
+            return api_dict
 
-            for parameter in method_value['parameters']:
-                if "body" == parameter['in'] and "schema" in parameter:
-                    postdata.update(utils.get_related_tag_definitions_content(
-                        self.swagger_all_info,
-                        parameter['schema']['$ref'].split('/')[2])
-                    )
+        mimeType = method_value.get('consumes', [''])[0]
+        postdata = {}
+        for parameter in method_value['parameters']:
+            if "body" == parameter['in'] and "schema" in parameter:
+                postdata.update(utils.get_related_tag_definitions_content(
+                    self.swagger_all_info,
+                    parameter['schema']['$ref'].split('/')[2])
+                )
 
-                if "formData" == parameter['in']:
-                    postdata.update({parameter['name']: ""})
-                if "header" == parameter['in']:
-                    api_dict['variables'].update({parameter['name']: ""})
-                    api_dict['request']['headers'].update({parameter['name']: f"${parameter['name']}"})
+            if "formData" == parameter['in']:
+                postdata.update({parameter['name']: ""})
+            if "header" == parameter['in']:
+                api_dict['variables'].update({parameter['name']: ""})
+                api_dict['request']['headers'].update({parameter['name']: f"${parameter['name']}"})
+        request_data_key = self._get_request_data_key(mimeType)
+        api_dict["request"][request_data_key] = postdata
 
-            request_data_key = "data"
-            if not mimeType:
-                pass
-            elif mimeType.startswith("application/json"):
-                request_data_key = "json"
-            else:
-                # TODO: make compatible with more mimeType
-                pass
-            api_dict["request"][request_data_key] = postdata
+    def _get_request_data_key(self, mimeType):
+        request_data_key = "data"
+
+        if not mimeType:
+            return request_data_key
+
+        if mimeType.startswith("application/json"):
+            return "json"
+
+        ## TODO: make compatible with more mimeType
+
+        return request_data_key
 
 
 
