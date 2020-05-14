@@ -295,4 +295,126 @@ class TestSwagger(object):
         assert api_dict['request']['headers'] == {}
         assert api_dict['variables'] == {}
 
+    def test_prepare_validate_post_pet_body(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/pet", "post")
+        )
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '405']},
+            {"eq": ["content.description", 'Invalid input']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+    def test_prepare_validate_put_pet_body(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/pet", "put")
+        )
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '400']},
+            {'eq': ['content.description', 'Invalid ID supplied']},
+            {"eq": ["status_code", '404']},
+            {'eq': ['content.description', 'Pet not found']},
+            {"eq": ["status_code", '405']},
+            {'eq': ['content.description', 'Validation exception']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+    def test_prepare_validate_get_pet_findByStatus_query(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/pet/findByStatus", "get")
+        )
+
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '200']},
+            {'eq': ['content.description', 'successful operation']},
+            {"eq": ["content.id", 0]},
+            {"eq": ["content.category.id", 0]},
+            {"eq": ["content.category.name", '']},
+            {"eq": ["content.name", '']},
+            {"eq": ["content.photoUrls", []]},
+            {"eq": ["content.tags", []]},
+            {"eq": ["content.status", '']},
+            {"eq": ["status_code", '400']},
+            {'eq': ['content.description', 'Invalid status value']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+    def test_prepare_validate_get_store_inventory_no_ref(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/store/inventory", "get")
+        )
+
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '200']},
+            {'eq': ['content.description', 'successful operation']},
+            {"eq": ["headers.Content-Type", "application/json"]}]
+
+    def test_prepare_validate_post_store_order_no_items(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/store/order", "post")
+        )
+
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '200']},
+            {'eq': ['content.description', 'successful operation']},
+            {'eq': ['content.id', 0]},
+            {'eq': ['content.petId', 0]},
+            {'eq': ['content.quantity', 0]},
+            {'eq': ['content.shipDate', '']},
+            {'eq': ['content.status', '']},
+            {'eq': ['content.complete', False]},
+            {"eq": ["status_code", '400']},
+            {'eq': ['content.description', 'Invalid Order']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+    def test_prepare_validate_post_user_default(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/user", "post")
+        )
+
+        assert api_dict['validate'] == [
+            {'eq': ['content.description', 'successful operation']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+    def test_prepare_validate_get_user_login_headers(self):
+        api_dict = {
+            'validate': []
+        }
+        self.swagger_parser._prepare_validate(
+            api_dict,
+            self.get_method_value("/user/login", "get")
+        )
+
+        assert api_dict['validate'] == [
+            {"eq": ["status_code", '200']},
+            {'eq': ['content.description', 'successful operation']},
+            {'eq': ['headers.X-Rate-Limit', 0]},
+            {'eq': ['headers.X-Expires-After', '']},
+            {"eq": ["status_code", '400']},
+            {'eq': ['content.description', 'Invalid username/password supplied']},
+            {"eq": ["headers.Content-Type", "application/xml"]}]
+
+
+
 
