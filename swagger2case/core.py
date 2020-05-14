@@ -163,47 +163,72 @@ class SwaggerParser(object):
                 ]
 
         """
-        for status_code, value in method_value['responses'].items():
+        if not utils.is_key_in_dict(r'responses', method_value):
+            logger.exception("responses miss in swagger json file")
+        else:
+            for status_code_key, status_code_value in method_value['responses'].items():
+                if utils.is_key_in_dict(r'[0-9]+', method_value['responses']):
+                    api_dict['validate'].append(
+                        {"eq": ["status_code", status_code_key]})
+                    self._make_response_content(api_dict, status_code_value)
+                elif utils.is_key_in_dict('default', method_value['responses']):
+                    self._make_response_content(api_dict, status_code_value)
+                else:
+                    logger.info("responses is empty")
+        self._make_response_headers(api_dict, method_value)
+
+    def _make_response_content(self, api_dict, status_code_value):
+        if utils.is_key_in_dict('description', status_code_value):
             api_dict['validate'].append(
-                {"eq": ["status_code", status_code]})
+                {"eq": ["content.description", status_code_value['description']]})
 
-            self._make_response_headers(api_dict, method_value)
+        if utils.is_key_in_dict('schema', status_code_value):
+            self._make_response_schema_content(api_dict, status_code_value['schema'])
 
-            if "schema" in value and "$ref" in value["schema"]["items"]:
-                definitions_dict = self._get_definitions_ref_value(value["schema"]["items"]["$ref"])
+        if utils.is_key_in_dict('headers', status_code_value):
+            for key, value in status_code_value['headers'].items():
+                api_dict['validate'].append(
+                    {"eq": [f'headers.{key}', utils.type_mapping.get(value['type'])]}
+                )
+    def _make_response_schema_content(self, api_dict, status_code_value_schema):
+        if self._is_items_in_schema(status_code_value_schema):
+            tag_name = status_code_value_schema['items']['$ref'].split('/')[-1]
+            self._generate_response_content_with_tag_value(
+                api_dict,
+                tag_name)
 
-                if "application/json" in method_value['produces']:
-                    try:
-                        definitions_dict_json = json.loads(definitions_dict)
-                    except JSONDecodeError:
-                        logger.warning(
-                            "response definitions_dict can not be loaded as json: {}".format(definitions_dict)
-                        )
-                        return
-                    if not isinstance(definitions_dict_json, dict):
-                        return
-                    logger.info(f"definitions_dict_json::{definitions_dict_json}")
-                    for key, definitions_value in definitions_dict_json.items():
-                        if isinstance(definitions_value, (dict, list)):
-                            continue
-                        api_dict['validate'].append(
-                            {"eq": [f"content.{key}", definitions_value]})
+        elif self._is_ref_in_schema(status_code_value_schema):
+
+            tag_name = status_code_value_schema['$ref'].split('/')[-1]
+            self._generate_response_content_with_tag_value(
+                api_dict,
+                tag_name)
+        else:
+            ### TODO: make compatible with more mimeType
+            pass
+
+    def _generate_response_content_with_tag_value(self, api_dict, tag_name):
+
+        definitions_dict = utils.get_related_tag_definitions_content(
+            self.swagger_all_info, tag_name)
+        logger.info(f"definitions_dict_json::{definitions_dict}")
+        api_dict['validate'].extend(utils.generate_validate_content(definitions_dict))
+
+    def _is_items_in_schema(self, schema_dict):
+        return utils.is_key_in_dict("items", schema_dict) and \
+                utils.is_key_in_dict(r"\$ref", schema_dict['items'])
+
+    def _is_ref_in_schema(self, schema_dict):
+        return utils.is_key_in_dict(r"\$ref", schema_dict)
 
 
     def _make_response_headers(self, api_dict, method_value):
-        if "produces" in method_value:
-
-            if "application/json" in method_value['produces']:
-                api_dict['validate'].append(
-                    {"eq": ["headers.Content-Type", "application/json"]}
-                )
-            elif "application/xml" in method_value['produces']:
-                api_dict['validate'].append(
-                    {"eq": ["headers.Content-Type", "application/xml"]}
-                )
-        else:
+        if "produces" not in method_value:
             logger.exception("produces miss in swagger api file")
-
+        if method_value['produces']:
+            api_dict['validate'].append(
+                {"eq": ['headers.Content-Type', method_value['produces'][0]]}
+            )
 
     def _prepare_request(self, api_dict, method, method_value, urlpath):
         """ extract info from path dict and make request.
@@ -414,18 +439,35 @@ class SwaggerParser(object):
         postdata = {}
         for parameter in method_value['parameters']:
             if "body" == parameter['in'] and "schema" in parameter:
-                postdata.update(utils.get_related_tag_definitions_content(
-                    self.swagger_all_info,
-                    parameter['schema']['$ref'].split('/')[2])
-                )
-
+                self._make_request_schema_data(postdata, parameter['schema'])
             if "formData" == parameter['in']:
                 postdata.update({parameter['name']: ""})
             if "header" == parameter['in']:
                 api_dict['variables'].update({parameter['name']: ""})
                 api_dict['request']['headers'].update({parameter['name']: f"${parameter['name']}"})
         request_data_key = self._get_request_data_key(mimeType)
+        logger.exception(postdata)
         api_dict["request"][request_data_key] = postdata
+
+    def _make_request_schema_data(self, postdata, parameter_schema):
+        if self._is_items_in_schema(parameter_schema):
+            tag_name = parameter_schema['items']['$ref'].split('/')[-1]
+            postdata.update(utils.get_related_tag_definitions_content(
+                self.swagger_all_info,
+                tag_name)
+            )
+
+        elif self._is_ref_in_schema(parameter_schema):
+
+            tag_name = parameter_schema['$ref'].split('/')[-1]
+            postdata.update(utils.get_related_tag_definitions_content(
+                self.swagger_all_info,
+                tag_name)
+            )
+
+        else:
+            ### TODO: make compatible with more mimeType
+            pass
 
     def _get_request_data_key(self, mimeType):
         request_data_key = "data"
