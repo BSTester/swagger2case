@@ -212,7 +212,7 @@ class SwaggerParser(object):
         definitions_dict = utils.get_related_tag_definitions_content(
             self.swagger_all_info, tag_name)
         logger.info(f"definitions_dict_json::{definitions_dict}")
-        api_dict['validate'].extend(utils.generate_validate_content(definitions_dict))
+        api_dict['validate'].extend(utils.generate_validate_content_with_definitions(definitions_dict))
 
     def _is_items_in_schema(self, schema_dict):
         return utils.is_key_in_dict("items", schema_dict) and \
